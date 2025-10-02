@@ -2,9 +2,14 @@ from fastapi import FastAPI , HTTPException , status
 from schemas import DBConfig , QueryRequest
 from contextlib import asynccontextmanager
 from langchain_core.messages import HumanMessage
+import models
+from database import engine
 import logging
 import os
 import sys
+from routers import user, auth
+import oauth2
+from fastapi import Depends
 
 
 # Add parent directory to path to allow importing from src
@@ -39,33 +44,43 @@ async def lifespan(app: FastAPI):
     logger.info("Agent is online") 
     yield
 
-
+models.Base.metadata.create_all(bind=engine)  # Create tables in the database
 app = FastAPI(lifespan=lifespan , title="SQLAgent API", description="API for SQLAgent using FastAPI")
+app.include_router(user.router)
+app.include_router(auth.router)
 
 
 @app.post("/connect_db", status_code=status.HTTP_200_OK)
-async def connect_db(new_db_config: DBConfig): 
+async def connect_db(new_db_config: DBConfig ): 
     try : 
         global global_db_connector
         
+        logger.info(f"Creating DB connector with: host={new_db_config.host}, port={new_db_config.port}, db={new_db_config.database}, user={new_db_config.username}")
         db_connector = DBConnector(new_db_config.host , new_db_config.port , new_db_config.database , new_db_config.username , new_db_config.password)
         connection_string = db_connector.get_connection_string()
+        logger.info(f"Connection string created: {connection_string}")
         if connection_string is None: 
                 raise HTTPException(status_code= status.HTTP_500_INTERNAL_SERVER_ERROR , detail= "Database connection failed.")
 
         # Store the connector globally so tools can use it
         global_db_connector = db_connector
+        logger.info(f"Global DB connector updated: {global_db_connector}")
         
         # Update the tools to use the new database connection
         import src.Tools.Tools as tools_module
         tools_module.update_db_connector(db_connector)
         
-        logger.info(f"Database connected successfully: {new_db_config.host}:{new_db_config.port}/{new_db_config.database}")
-        
-        return {"message": "Database connected successfully", "connection_string": connection_string}
-    except Exception as e: 
-        raise HTTPException(status_code= status.HTTP_500_INTERNAL_SERVER_ERROR , detail= f"Error occurred with exception : {e}")
-    
+        # Rebuild the graph with updated tools
+        global global_graph
+        global_graph = Graph_builder().get_compiled_graph()
+        logger.info("Graph rebuilt with new database connection")
+
+        logger.info(f"Database cardinalities saved successfully")
+
+        return {"message": "Database cardinalities saved successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error occurred with exception: {e}")
+
 
 
 
@@ -86,7 +101,7 @@ async def health_check():
 
 
 @app.post("/ask", response_model=str, status_code=status.HTTP_200_OK)
-async def ask_question(query_request: QueryRequest):
+async def ask_question(query_request: QueryRequest , user_id :int = Depends(oauth2.get_current_user)):
     try:
         global global_graph
         if global_graph is None:
@@ -104,7 +119,7 @@ async def ask_question(query_request: QueryRequest):
         )
         logger.info(f"Agent response: {response}")
         
-        # Extract the final message content from the response
+        
         if response and "messages" in response and response["messages"]:
             final_message = response["messages"][-1]
             if hasattr(final_message, 'content'):

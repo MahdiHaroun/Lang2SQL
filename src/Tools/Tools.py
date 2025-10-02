@@ -72,17 +72,21 @@ def update_db_connector(new_db_connector):
 def fetch_db_schema() -> str:
     """Fetches the database schema and returns it as a string."""
     try:
+        print(f"Debug: db_connector = {db_connector}")
+        print(f"Debug: fetch_db_instance = {fetch_db_instance}")
+        
         if not db_connector:
-            raise ValueError("Database connection not configured. Please connect to a database first.")
+            return "Database connection not configured. Please connect to a database first using the /connect_db endpoint."
         
         print("Fetching the database schema...")
         connector = db_connector.get_connection_string()
+        print(f"Debug: connection string = {connector}")
         if connector is None:
-            raise ValueError("Database connection failed.")
+            return "Database connection failed - connection string is None."
         print("Database connected successfully.")
         
         if not fetch_db_instance:
-            raise ValueError("Database fetch tool not initialized.")
+            return "Database fetch tool not initialized."
         
         db_schema = fetch_db_instance.get_db_schema()
         print("Database schema fetched successfully.")

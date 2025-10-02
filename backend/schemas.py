@@ -1,4 +1,6 @@
-from pydantic import BaseModel, Field 
+from pydantic import BaseModel, Field  ,  EmailStr
+from typing import Optional
+from datetime import datetime
 
 
 
@@ -13,3 +15,31 @@ class DBConfig(BaseModel):
 class QueryRequest(BaseModel):
     question: str = Field(..., description="The user's question to be answered using SQL queries")
     thread_id: str = Field(default="default-thread", description="A unique identifier for the conversation thread")
+
+
+
+
+class User_create(BaseModel):
+    name : str 
+    email : EmailStr
+    password : str
+
+class User_Response(BaseModel):
+    
+    name: str 
+    email: EmailStr
+    
+    
+    class Config:
+        from_attributes = True
+
+class User_login(BaseModel):   #used form instead
+    email: EmailStr
+    password: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    id: Optional[str] = None
