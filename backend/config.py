@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     algorithm: str
     access_token_expire_minutes: int
     
+    # Google OAuth settings
+    google_client_id: str
+    google_client_secret: str
+    google_redirect_uri: str
+    
     # Optional fields for compatibility
     groq_api_key: Optional[str] = None
     langsmith_tracing: Optional[str] = None

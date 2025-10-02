@@ -7,7 +7,7 @@ from database import engine
 import logging
 import os
 import sys
-from routers import user, auth
+from routers import user, auth, google_auth
 import oauth2
 from fastapi import Depends
 
@@ -48,6 +48,7 @@ models.Base.metadata.create_all(bind=engine)  # Create tables in the database
 app = FastAPI(lifespan=lifespan , title="SQLAgent API", description="API for SQLAgent using FastAPI")
 app.include_router(user.router)
 app.include_router(auth.router)
+app.include_router(google_auth.router)
 
 
 @app.post("/connect_db", status_code=status.HTTP_200_OK)
