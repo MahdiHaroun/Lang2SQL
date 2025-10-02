@@ -1,12 +1,12 @@
 from typing import List, Any, Union, Dict
-from src.Tools.db_connector import DBConnector
+from src.Tools_Functions.db_connector import DBConnector
 from sqlalchemy import create_engine, text
 
 
 class execute_sql: 
     def __init__(self , db_connector: DBConnector) :
         self.connection_string = db_connector.get_connection_string()
-        # Use synchronous connection for PostgreSQL
+        
         sync_connection_string = self.connection_string.replace("postgresql+asyncpg://", "postgresql://")
         self.engine = create_engine(sync_connection_string)
 

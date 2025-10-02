@@ -1,39 +1,41 @@
-from src.State.GraphState import GraphState
-from langgraph.graph import StateGraph, START, END
-from src.LLM.groqllm import GroqLLM
-from src.Nodes.Nodes import agent
+from langgraph.graph import START, StateGraph
 from langgraph.prebuilt import tools_condition
 from langgraph.prebuilt import ToolNode
-from src.Nodes.Nodes import LLM_withTools, fetch_db_schema_tool, generate_sql_tool, execute_sql_query_tool, get_summary_tool
+from IPython.display import Image, display
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import MessagesState
+from src.LLM.llm_with_tools import llm_with_tools
+from src.Agent.agent import SQLAgent 
 
 
+class Graph_builder: 
+    def __init__(self):
+        self.graph = StateGraph(MessagesState)
+        self.llm_with_tools_instance = llm_with_tools()
+        self.llm_tools = self.llm_with_tools_instance.llm_with_tools()
+        self.assistant = SQLAgent().get_agent(self.llm_tools)
+        self.memory_saver = MemorySaver()
 
 
-class Graph_builder:    
-    def __init__(self): 
-        self.graph = StateGraph(GraphState)
+    def build_graph(self):
+        tools = self.llm_with_tools_instance.get_tools()
 
-    def build_graph(self): 
-        tools = [fetch_db_schema_tool, generate_sql_tool, execute_sql_query_tool, get_summary_tool]
-        
-        self.graph.add_node("agent", agent)
+
+        self.graph.add_node("assistant", self.assistant)
         self.graph.add_node("tools", ToolNode(tools))
-        self.graph.add_edge(START, "agent")
+        self.graph.add_edge(START, "assistant")
         self.graph.add_conditional_edges(
-            "agent",
+            "assistant",
             # If the latest message (result) from assistant is a tool call -> tools_condition routes to tools
             # If the latest message (result) from assistant is a not a tool call -> tools_condition routes to END
             tools_condition,
         )
-        self.graph.add_edge("tools", "agent")
+        self.graph.add_edge("tools", "assistant")
 
+        return self.graph.compile(checkpointer=self.memory_saver)
+    
 
-
-        
-
-        return self.graph.compile()
-
-
+    
     def get_compiled_graph(self):
         """
         Get the complete, compiled graph ready for execution
@@ -42,4 +44,5 @@ class Graph_builder:
 
 
 
-graph = Graph_builder().build_graph()
+graph = Graph_builder().get_compiled_graph()
+

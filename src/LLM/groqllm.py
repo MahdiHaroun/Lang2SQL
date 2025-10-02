@@ -7,7 +7,7 @@ class GroqLLM:
     @staticmethod
     def get_llm():
         try:
-            load_dotenv()
+            load_dotenv("../../.env")
             groq_api_key = os.getenv("GROQ_API_KEY")
             print(groq_api_key)
             os.environ["GROQ_API_KEY"] = groq_api_key

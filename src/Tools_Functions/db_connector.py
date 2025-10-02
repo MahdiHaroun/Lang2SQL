@@ -1,3 +1,4 @@
+from dotenv import load_dotenv  
 
 class DBConnector:
     def __init__(self , host:str , port:int , database:str , user:str , password:str): 
