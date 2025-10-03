@@ -23,3 +23,4 @@ pydantic[email]
 python-jose[cryptography]
 requests
 IPython
+asyncpg

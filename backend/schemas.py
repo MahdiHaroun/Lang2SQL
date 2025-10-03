@@ -3,13 +3,14 @@ from typing import Optional
 from datetime import datetime
 
 
-
 class DBConfig(BaseModel):
+    owner_id : int = Field(..., description="ID of the user who owns this database connection")
+    db_type: str = Field(..., description="Database type, e.g. Postgres/MySQL")
     username: str = Field(..., description="Database username")
-    password: str = Field(..., description="Database password")
+    db_password: str = Field(..., description="Database password")
     host: str = Field(..., description="Database host address")
     port: int = Field(..., description="Database port number")
-    database: str = Field(..., description="Name of the database to connect to")
+    database_name: str = Field(..., description="Name of the database to connect to")
     
 
 class QueryRequest(BaseModel):
@@ -23,11 +24,13 @@ class User_create(BaseModel):
     name : str 
     email : EmailStr
     password : str
+    thread_id : str
 
 class User_Response(BaseModel):
     
     name: str 
     email: EmailStr
+    thread_id : str
     
     
     class Config:

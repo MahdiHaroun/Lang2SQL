@@ -2,6 +2,7 @@ import models, schemas, utils
 from database import get_db
 from fastapi import FastAPI , status , HTTPException , Depends , APIRouter
 from sqlalchemy.orm import Session 
+import uuid
 
 
 router = APIRouter(
@@ -23,6 +24,7 @@ async def create_user(new_user: schemas.User_create, db: Session = Depends(get_d
     # Hash the password before storing it
     hashed_password = utils.hash(new_user.password)
     new_user.password = hashed_password  # Update the password with the hashed value
+    new_user.thread_id = str(uuid.uuid4())  # Generate a unique thread_id for the user
     
 
 

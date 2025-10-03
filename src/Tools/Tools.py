@@ -1,8 +1,8 @@
 from langchain_core.tools import Tool, tool
-from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import MessagesState
 from dotenv import load_dotenv
+from langchain_groq import ChatGroq
 import os
 
 # Load environment variables - try multiple paths
@@ -22,7 +22,7 @@ try:
     llm = ChatGroq(model="openai/gpt-oss-120b")
 except Exception as e:
     print(f"Warning: Failed to initialize ChatGroq: {e}")
-    print(f"GROQ_API_KEY found: {bool(os.getenv('GROQ_API_KEY'))}")
+   
     llm = None
 
 from src.Tools_Functions.nlp_gen import nlp_chain 
@@ -32,75 +32,54 @@ from src.Tools_Functions.execute_sql import execute_sql
 from src.Tools_Functions.summary import SummaryGenerator
 import os
 
-# Initialize with default values from environment (fallback)
+# Initialize tools - database connection will be set via /connect_db endpoint
 nlp_generator = nlp_chain()
-default_db_connector = None
-try:
-    if all([os.getenv("POSTGRES_HOST"), os.getenv("POSTGRES_PORT"), 
-            os.getenv("POSTGRES_DB_NAME"), os.getenv("POSTGRES_USERNAME"), 
-            os.getenv("POSTGRES_PASSWORD")]):
-        default_db_connector = DBConnector(os.getenv("POSTGRES_HOST"), 
-                                         int(os.getenv("POSTGRES_PORT")), 
-                                         os.getenv("POSTGRES_DB_NAME"), 
-                                         os.getenv("POSTGRES_USERNAME"), 
-                                         os.getenv("POSTGRES_PASSWORD"))
-except Exception as e:
-    print(f"Warning: Could not initialize default database connector: {e}")
 
-# Global variables that can be updated
-db_connector = default_db_connector
+# Global variables that will be updated when database is connected via FastAPI
+db_connector = None
 fetch_db_instance = None
 execute_sql_instance = None
 summary_generator = SummaryGenerator()
 
-# Initialize database tools if connector is available
-if db_connector:
-    fetch_db_instance = fetch_db(db_connector)  
-    execute_sql_instance = execute_sql(db_connector)
-
-def update_db_connector(new_db_connector):
-    """Update the global database connector and reinitialize tools"""
+def update_db_connector(connection_string: str):
+    """Update the global database connector with a new connection string and reinitialize tools"""
     global db_connector, fetch_db_instance, execute_sql_instance
     
-    db_connector = new_db_connector
-    fetch_db_instance = fetch_db(db_connector)
-    execute_sql_instance = execute_sql(db_connector)
-    print(f"Database connector updated successfully")
+    try:
+        db_connector = DBConnector(connection_string)
+        fetch_db_instance = fetch_db(db_connector)
+        execute_sql_instance = execute_sql(db_connector)
+        print(f"Database connector updated successfully")
+        return True
+    except Exception as e:
+        print(f"Failed to update database connector: {e}")
+        return False
+
+def is_database_connected():
+    """Check if database is connected and tools are initialized"""
+    return db_connector is not None and fetch_db_instance is not None and execute_sql_instance is not None
 
 
 @tool
 def fetch_db_schema() -> str:
     """Fetches the database schema and returns it as a string."""
     try:
-        print(f"Debug: db_connector = {db_connector}")
-        print(f"Debug: fetch_db_instance = {fetch_db_instance}")
-        
-        if not db_connector:
-            return "Database connection not configured. Please connect to a database first using the /connect_db endpoint."
+        if not is_database_connected():
+            return "Database not connected. Please use the /connect_db/{db_id} endpoint to establish a database connection first."
         
         print("Fetching the database schema...")
-        connector = db_connector.get_connection_string()
-        print(f"Debug: connection string = {connector}")
-        if connector is None:
-            return "Database connection failed - connection string is None."
-        print("Database connected successfully.")
-        
-        if not fetch_db_instance:
-            return "Database fetch tool not initialized."
-        
         db_schema = fetch_db_instance.get_db_schema()
         print("Database schema fetched successfully.")
         return str(db_schema)
     except Exception as e: 
-        raise ValueError(f"Error occurred with exception : {e}")
-
+        raise ValueError(f"Error occurred with exception: {e}")
 
 @tool
 def generate_sql(question: str) -> str:
     """Generates an SQL query based on the user's question. This tool fetches the database schema internally."""
     try:
-        if not db_connector or not fetch_db_instance:
-            raise ValueError("Database connection not configured. Please connect to a database first.")
+        if not is_database_connected():
+            raise ValueError("Database not connected. Please use the /connect_db/{db_id} endpoint to establish a database connection first.")
             
         print("Fetching schema for SQL generation...")
         # Get fresh schema for SQL generation
@@ -111,21 +90,21 @@ def generate_sql(question: str) -> str:
         print(f"Generated SQL: {generated_sql}")
         return str(generated_sql)
     except Exception as e:
-        raise ValueError(f"Error occurred with exception : {e}")
+        raise ValueError(f"Error occurred with exception: {e}")
         
         
 @tool        
 def execute_sql_query(query: str) -> str:
     """Executes the generated SQL query and returns the query results."""
     try:
-        if not db_connector or not execute_sql_instance:
-            raise ValueError("Database connection not configured. Please connect to a database first.")
+        if not is_database_connected():
+            raise ValueError("Database not connected. Please use the /connect_db/{db_id} endpoint to establish a database connection first.")
             
         result = execute_sql_instance.execute_query(query)
         print(f"Query Result: {result}")
         return str(result)
     except Exception as e: 
-        raise ValueError(f"Error occurred with exception : {e}")
+        raise ValueError(f"Error occurred with exception: {e}")
         
 
 @tool
