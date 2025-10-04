@@ -3,7 +3,8 @@ from schemas import DBConfig , QueryRequest
 from contextlib import asynccontextmanager
 from langchain_core.messages import HumanMessage
 import models
-from database import engine
+from database import engine, get_db
+from sqlalchemy.orm import Session
 import logging
 import os
 import sys
@@ -71,27 +72,68 @@ async def health_check():
         return {"status": "unhealthy", "message": "Main LLM not initialized"}
     return {"status": "healthy", "message": "Service is up and running"}
 
+@app.get("/health/session")
+async def session_health_check(user_session: tuple = Depends(oauth2.get_current_user_and_session)):
+    """Health check endpoint with session information"""
+    current_user, session_id = user_session
+    
+    try:
+        from src.Tools.Tools import is_database_connected
+        db_connected = is_database_connected(session_id)
+    except:
+        db_connected = False
+    
+    return {
+        "status": "healthy",
+        "message": "Service is up and running",
+        "user_id": current_user.id,
+        "session_id": session_id,      # UUID serving as session identifier
+        "thread_id": session_id,       # Same UUID serving as conversation thread
+        "database_connected": db_connected
+    }
+
 
 
 @app.post("/ask", response_model=str, status_code=status.HTTP_200_OK)
-async def ask_question(query_request: QueryRequest , user_id :int = Depends(oauth2.get_current_user)):
+async def ask_question(
+    query_request: QueryRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user)
+):
     try:
-        global global_graph
-        if global_graph is None:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Graph not initialized")
+        # Validate that the user in the payload matches the authenticated user
+        if query_request.user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="User ID in payload does not match authenticated user"
+            )
         
-        logger.info(f"Received question: {query_request.question}")
+        # Validate that the session belongs to the user by checking the database
+        user_session = db.query(models.Session).filter(
+            models.Session.session_token == query_request.session_id,
+            models.Session.user_id == current_user.id
+        ).first()
         
-        # Provide thread_id for conversation memory
-        thread_id = getattr(query_request, 'thread_id', 'default-thread')
-        config = {"configurable": {"thread_id": thread_id}}
+        if not user_session:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="Session ID does not belong to the authenticated user or session not found"
+            )
         
-        response = await global_graph.ainvoke(
+        # Get session-specific graph using the validated session_id
+        from src.Graph.graph import get_session_graph
+        session_graph = get_session_graph(query_request.session_id)
+        
+        logger.info(f"Received question from user {current_user.id}, session/thread {query_request.session_id}: {query_request.question}")
+        
+        # Use session_id as thread_id for conversation memory - session_id IS the thread_id (UUID)
+        config = {"configurable": {"thread_id": query_request.session_id}}
+
+        response = await session_graph.ainvoke(
             {"messages": [HumanMessage(content=query_request.question)]}, 
             config=config
         )
-        logger.info(f"Agent response: {response}")
-        
+        logger.info(f"Agent response for session {query_request.session_id}: {response}")
         
         if response and "messages" in response and response["messages"]:
             final_message = response["messages"][-1]

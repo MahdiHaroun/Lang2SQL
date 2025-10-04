@@ -14,8 +14,10 @@ class DBConfig(BaseModel):
     
 
 class QueryRequest(BaseModel):
+    user_id: int = Field(..., description="ID of the user making the request")
+    session_id: str = Field(..., description="Session ID (UUID) that serves as thread_id")
     question: str = Field(..., description="The user's question to be answered using SQL queries")
-    thread_id: str = Field(default="default-thread", description="A unique identifier for the conversation thread")
+    
 
 
 
@@ -24,13 +26,13 @@ class User_create(BaseModel):
     name : str 
     email : EmailStr
     password : str
-    thread_id : str
+    
 
 class User_Response(BaseModel):
     
     name: str 
     email: EmailStr
-    thread_id : str
+    
     
     
     class Config:
@@ -46,3 +48,13 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     id: Optional[str] = None
+
+
+
+class Session(BaseModel):
+    session_token: str
+    user_id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

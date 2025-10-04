@@ -15,7 +15,6 @@ class User(Base):
     name = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=False)
     password = Column(String, nullable=False)
-    thread_id = Column(String, unique=True, nullable=True)  # One thread per user
     created_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'), nullable=False)
     number_of_connections = Column(Integer, default=0, nullable=False)
 
@@ -38,6 +37,16 @@ class DB_Connection_Details(Base):
     owner = relationship("User", back_populates="db_connections")
 
 
+
+class Session(Base): 
+    __tablename__ = 'sessions'
+    id = Column(Integer, primary_key=True, nullable=False)
+    session_token = Column(String, unique=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=text('now()'), nullable=False)
+    
+
+    user = relationship("User")
 
 
 

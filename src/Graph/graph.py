@@ -9,9 +9,10 @@ from src.Agent.agent import SQLAgent
 
 
 class Graph_builder: 
-    def __init__(self):
+    def __init__(self, session_id: str = "default"):
+        self.session_id = session_id
         self.graph = StateGraph(MessagesState)
-        self.llm_with_tools_instance = llm_with_tools()
+        self.llm_with_tools_instance = llm_with_tools(session_id)
         self.llm_tools = self.llm_with_tools_instance.llm_with_tools()
         self.assistant = SQLAgent().get_agent(self.llm_tools)
         self.memory_saver = MemorySaver()
@@ -19,7 +20,6 @@ class Graph_builder:
 
     def build_graph(self):
         tools = self.llm_with_tools_instance.get_tools()
-
 
         self.graph.add_node("assistant", self.assistant)
         self.graph.add_node("tools", ToolNode(tools))
@@ -43,6 +43,15 @@ class Graph_builder:
         return self.build_graph()
 
 
+# Session-based graph management
+session_graphs = {}
 
+def get_session_graph(session_id: str):
+    """Get or create a graph for a specific session"""
+    if session_id not in session_graphs:
+        session_graphs[session_id] = Graph_builder(session_id).get_compiled_graph()
+    return session_graphs[session_id]
+
+# Default graph for backward compatibility
 graph = Graph_builder().get_compiled_graph()
 

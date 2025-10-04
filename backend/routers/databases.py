@@ -2,6 +2,7 @@ import models, schemas, utils
 from database import get_db
 from fastapi import FastAPI , status , HTTPException , Depends , APIRouter
 from sqlalchemy.orm import Session 
+import oauth2
 
 
 
@@ -11,7 +12,13 @@ router = APIRouter(
 )
 
 @router.post("/add_db_connection", status_code=status.HTTP_201_CREATED)
-async def add_db_connection(new_db:schemas.DBConfig , db:Session = Depends(get_db)):
+async def add_db_connection(
+    new_db: schemas.DBConfig, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user)
+):
+    # Ensure the database connection is owned by the current user
+    new_db.owner_id = current_user.id
     new_database = models.DB_Connection_Details(**new_db.dict())
     db.add(new_database)
     db.commit()
@@ -25,13 +32,25 @@ async def add_db_connection(new_db:schemas.DBConfig , db:Session = Depends(get_d
 
 
 @router.post("/connect_db/{db_id}", status_code=status.HTTP_200_OK)
-async def connect_db(db_id: int , db:Session = Depends(get_db)): 
-    try: 
-        # Get the database connection details
-        db_details = db.query(models.DB_Connection_Details).filter(models.DB_Connection_Details.id == db_id).first()
+async def connect_db(
+    db_id: int, 
+    db: Session = Depends(get_db),
+    user_session: tuple = Depends(oauth2.get_current_user_and_session)
+): 
+    try:
+        current_user, session_id = user_session
+        
+        # Get the database connection details and ensure it belongs to the current user
+        db_details = db.query(models.DB_Connection_Details).filter(
+            models.DB_Connection_Details.id == db_id,
+            models.DB_Connection_Details.owner_id == current_user.id
+        ).first()
         
         if not db_details:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Database connection not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, 
+                detail="Database connection not found or you don't have permission to access it"
+            )
         
         # Build the connection string (using psycopg2 for synchronous operations)
         connection_string = f"postgresql+psycopg2://{db_details.username}:{db_details.db_password}@{db_details.host}:{db_details.port}/{db_details.database_name}"
@@ -44,10 +63,10 @@ async def connect_db(db_id: int , db:Session = Depends(get_db)):
         # If successful, close the test connection
         connection.close()
         
-        # Update the global database connector in Tools system
+        # Update the session-specific database connector in Tools system
         try:
             from src.Tools.Tools import update_db_connector
-            update_success = update_db_connector(connection_string)
+            update_success = update_db_connector(connection_string, session_id)
             if not update_success:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
@@ -61,8 +80,11 @@ async def connect_db(db_id: int , db:Session = Depends(get_db)):
         
         return {
             "message": "Database connection successful and tools updated",
+            "session_id": session_id,  # This UUID serves as both session_id and thread_id
+            "thread_id": session_id,   # Same as session_id for conversation continuity
             "db_id": db_id,
-            "database_name": db_details.database_name
+            "database_name": db_details.database_name,
+            "user_id": current_user.id
         }
      
     except Exception as e:
@@ -70,16 +92,73 @@ async def connect_db(db_id: int , db:Session = Depends(get_db)):
     
 
 
-@router.get("/databases/{user_id}", status_code=status.HTTP_200_OK)
-async def get_user_dbs(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    
-    db_connections = db.query(models.DB_Connection_Details).filter(models.DB_Connection_Details.owner_id == user_id).all()
+@router.get("/databases", status_code=status.HTTP_200_OK)
+async def get_user_dbs(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user)
+):
+    # Get databases for the currently authenticated user only
+    db_connections = db.query(models.DB_Connection_Details).filter(
+        models.DB_Connection_Details.owner_id == current_user.id
+    ).all()
     
     return {
-        "user_id": user_id,
+        "user_id": current_user.id,
         "databases": db_connections
     }
+
+@router.get("/session-status", status_code=status.HTTP_200_OK)
+async def get_session_status(
+    user_session: tuple = Depends(oauth2.get_current_user_and_session)
+):
+    """Get current session information and database connection status"""
+    current_user, session_id = user_session
+    
+    # Check if database is connected for this session
+    try:
+        from src.Tools.Tools import is_database_connected
+        db_connected = is_database_connected(session_id)
+    except ImportError:
+        db_connected = False
+    
+    return {
+        "user_id": current_user.id,
+        "session_id": session_id,      # UUID serving as session identifier  
+        "thread_id": session_id,       # Same UUID serving as conversation thread identifier
+        "database_connected": db_connected
+    }
+
+@router.post("/disconnect-session", status_code=status.HTTP_200_OK)
+async def disconnect_session(
+    user_session: tuple = Depends(oauth2.get_current_user_and_session)
+):
+    """Disconnect database for the current session"""
+    current_user, session_id = user_session
+    
+    try:
+        from src.Tools.Tools import session_db_connectors, session_fetch_db, session_execute_sql
+        
+        # Remove session-specific connectors
+        if session_id in session_db_connectors:
+            del session_db_connectors[session_id]
+        if session_id in session_fetch_db:
+            del session_fetch_db[session_id]
+        if session_id in session_execute_sql:
+            del session_execute_sql[session_id]
+            
+        # Also remove session graph
+        from src.Graph.graph import session_graphs
+        if session_id in session_graphs:
+            del session_graphs[session_id]
+        
+        return {
+            "message": "Session disconnected successfully",
+            "session_id": session_id,  # UUID that was serving as both session and thread ID
+            "thread_id": session_id,   # Same UUID for thread continuity (now disconnected)
+            "user_id": current_user.id
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Error disconnecting session: {e}"
+        )
