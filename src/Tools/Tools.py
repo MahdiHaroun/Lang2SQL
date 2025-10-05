@@ -124,7 +124,8 @@ def create_session_tools(session_id: str):
     
     return [fetch_db_schema, generate_sql, execute_sql_query]
 
-# Default tools for backward compatibility
+# Default tools for backward compatibility before session management
+
 @tool
 def fetch_db_schema() -> str:
     """Fetches the database schema and returns it as a string."""
