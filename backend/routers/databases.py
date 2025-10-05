@@ -132,33 +132,72 @@ async def get_session_status(
 async def disconnect_session(
     user_session: tuple = Depends(oauth2.get_current_user_and_session)
 ):
-    """Disconnect database for the current session"""
+    """Disconnect database for the current session and clean up Redis data"""
     current_user, session_id = user_session
     
     try:
-        from src.Tools.Tools import session_db_connectors, session_fetch_db, session_execute_sql
+        # Clean up Redis session data
+        from src.Tools.Tools import cleanup_session
+        redis_cleanup_success = cleanup_session(session_id)
         
-        # Remove session-specific connectors
-        if session_id in session_db_connectors:
-            del session_db_connectors[session_id]
-        if session_id in session_fetch_db:
-            del session_fetch_db[session_id]
-        if session_id in session_execute_sql:
-            del session_execute_sql[session_id]
-            
-        # Also remove session graph
-        from src.Graph.graph import session_graphs
-        if session_id in session_graphs:
-            del session_graphs[session_id]
+        # Clean up in-memory session graphs
+        try:
+            from src.Graph.graph import session_graphs
+            if session_id in session_graphs:
+                del session_graphs[session_id]
+        except ImportError:
+            pass  # Graph module might not be available
         
         return {
             "message": "Session disconnected successfully",
             "session_id": session_id,  # UUID that was serving as both session and thread ID
             "thread_id": session_id,   # Same UUID for thread continuity (now disconnected)
-            "user_id": current_user.id
+            "user_id": current_user.id,
+            "redis_cleanup": redis_cleanup_success
         }
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
             detail=f"Error disconnecting session: {e}"
+        )
+
+@router.get("/session-info/{session_id}", status_code=status.HTTP_200_OK)
+async def get_detailed_session_info(
+    session_id: str,
+    current_user: models.User = Depends(oauth2.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get detailed session information including Redis data"""
+    try:
+        # Validate session belongs to user
+        user_session = db.query(models.Session).filter(
+            models.Session.session_token == session_id,
+            models.Session.user_id == current_user.id
+        ).first()
+        
+        if not user_session:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Session not found or does not belong to user"
+            )
+        
+        # Get Redis session information
+        from src.Tools.Tools import get_session_info, is_database_connected
+        redis_info = get_session_info(session_id)
+        db_connected = is_database_connected(session_id)
+        
+        return {
+            "session_id": session_id,
+            "thread_id": session_id,
+            "user_id": current_user.id,
+            "database_connected": db_connected,
+            "redis_data": redis_info,
+            "db_session_created_at": user_session.created_at.isoformat() if user_session.created_at else None
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving session info: {e}"
         )
