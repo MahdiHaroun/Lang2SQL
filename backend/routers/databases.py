@@ -92,18 +92,24 @@ async def connect_db(
     
 
 
-@router.get("/databases", status_code=status.HTTP_200_OK)
+@router.get("/databases/{user_id}", status_code=status.HTTP_200_OK)
 async def get_user_dbs(
+    user_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user)
-):
+):  
+    if current_user.id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="You do not have permission to access these databases"
+            )
     # Get databases for the currently authenticated user only
     db_connections = db.query(models.DB_Connection_Details).filter(
-        models.DB_Connection_Details.owner_id == current_user.id
+        models.DB_Connection_Details.owner_id == user_id
     ).all()
     
     return {
-        "user_id": current_user.id,
+        "user_id": user_id,
         "databases": db_connections
     }
 
