@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 import logging
 import os
 import sys
-from routers import user, auth, google_auth , databases
+from routers import user, google_auth , databases , sessions
 import oauth2
 from fastapi import Depends
 
@@ -48,7 +48,7 @@ async def lifespan(app: FastAPI):
 models.Base.metadata.create_all(bind=engine)  # Create tables in the database
 app = FastAPI(lifespan=lifespan , title="SQLAgent API", description="API for SQLAgent using FastAPI")
 app.include_router(user.router)
-app.include_router(auth.router)
+app.include_router(sessions.router)
 app.include_router(google_auth.router)
 app.include_router(databases.router )
 

@@ -42,7 +42,8 @@ class User_login(BaseModel):   #used form instead
     email: EmailStr
     password: str
 
-class Token(BaseModel):
+class Token(User_Response):
+    
     access_token: str
     token_type: str
 
@@ -58,3 +59,9 @@ class Session(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class ConnectDBRequest(BaseModel):
+    db_id: int = Field(..., description="ID of the database connection to use")
+    session_id: str = Field(..., description="Session ID (UUID) that serves as thread_id")
+    

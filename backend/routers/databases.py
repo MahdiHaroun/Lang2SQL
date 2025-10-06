@@ -8,7 +8,7 @@ import oauth2
 
 router = APIRouter(
     prefix="/databases",
-    tags=["databases"]
+    tags=["Databases"]
 )
 
 @router.post("/add_db_connection", status_code=status.HTTP_201_CREATED)
@@ -31,18 +31,19 @@ async def add_db_connection(
 
 
 
-@router.post("/connect_db/{db_id}", status_code=status.HTTP_200_OK)
+@router.post("/connect_db/", status_code=status.HTTP_200_OK)
 async def connect_db(
-    db_id: int, 
+    new_db_connection: schemas.ConnectDBRequest,
     db: Session = Depends(get_db),
     user_session: tuple = Depends(oauth2.get_current_user_and_session)
+    
 ): 
     try:
         current_user, session_id = user_session
-        
-        # Get the database connection details and ensure it belongs to the current user
+
+    # Get the database connection details and ensure it belongs to the current user
         db_details = db.query(models.DB_Connection_Details).filter(
-            models.DB_Connection_Details.id == db_id,
+            models.DB_Connection_Details.id == new_db_connection.db_id,
             models.DB_Connection_Details.owner_id == current_user.id
         ).first()
         
@@ -82,7 +83,7 @@ async def connect_db(
             "message": "Database connection successful and tools updated",
             "session_id": session_id,  # This UUID serves as both session_id and thread_id
             "thread_id": session_id,   # Same as session_id for conversation continuity
-            "db_id": db_id,
+            "db_id": db_details.id,
             "database_name": db_details.database_name,
             "user_id": current_user.id
         }
@@ -113,58 +114,3 @@ async def get_user_dbs(
         "databases": db_connections
     }
 
-@router.get("/session-status", status_code=status.HTTP_200_OK)
-async def get_session_status(
-    user_session: tuple = Depends(oauth2.get_current_user_and_session)
-):
-    """Get current session information and database connection status"""
-    current_user, session_id = user_session
-    
-    # Check if database is connected for this session
-    try:
-        from src.Tools.Tools import is_database_connected
-        db_connected = is_database_connected(session_id)
-    except ImportError:
-        db_connected = False
-    
-    return {
-        "user_id": current_user.id,
-        "session_id": session_id,      # UUID serving as session identifier  
-        "thread_id": session_id,       # Same UUID serving as conversation thread identifier
-        "database_connected": db_connected
-    }
-
-@router.post("/disconnect-session", status_code=status.HTTP_200_OK)
-async def disconnect_session(
-    user_session: tuple = Depends(oauth2.get_current_user_and_session)
-):
-    """Disconnect database for the current session"""
-    current_user, session_id = user_session
-    
-    try:
-        from src.Tools.Tools import session_db_connectors, session_fetch_db, session_execute_sql
-        
-        # Remove session-specific connectors
-        if session_id in session_db_connectors:
-            del session_db_connectors[session_id]
-        if session_id in session_fetch_db:
-            del session_fetch_db[session_id]
-        if session_id in session_execute_sql:
-            del session_execute_sql[session_id]
-            
-        # Also remove session graph
-        from src.Graph.graph import session_graphs
-        if session_id in session_graphs:
-            del session_graphs[session_id]
-        
-        return {
-            "message": "Session disconnected successfully",
-            "session_id": session_id,  # UUID that was serving as both session and thread ID
-            "thread_id": session_id,   # Same UUID for thread continuity (now disconnected)
-            "user_id": current_user.id
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-            detail=f"Error disconnecting session: {e}"
-        )

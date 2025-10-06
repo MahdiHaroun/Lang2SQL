@@ -2,18 +2,21 @@ import models, schemas, utils
 from database import get_db
 from fastapi import FastAPI , status , HTTPException , Depends , APIRouter
 from sqlalchemy.orm import Session
+from fastapi.security.oauth2 import OAuth2PasswordRequestForm
+import models, schemas, database, utils 
+import oauth2
 
 
 router = APIRouter(
     prefix="/users",
-    tags=["users"]
+    tags=["Users"]
 )
 
 
 
 
 @router.post("/createuser", status_code=status.HTTP_201_CREATED , response_model=schemas.User_Response)  # Use response_model to return UserResponse schema
-async def create_user(new_user: schemas.User_create, db: Session = Depends(get_db)): 
+async def create_user(new_user: schemas.User_create, db: Session = Depends(get_db)):  #“Before running get_users(), call get_db(), and pass the database session it provides as db
 
     # Check if email already exists BEFORE creating the user
     existing_user = db.query(models.User).filter(models.User.email == new_user.email).first()
@@ -42,3 +45,23 @@ async def get_user(id:int , db :Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     
     return user
+
+
+@router.post("/login", response_model=schemas.Token)
+async def login(user_credentials: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(database.get_db)):
+    user = db.query(models.User).filter(models.User.email == user_credentials.username).first()
+    
+    if not user:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid credentials")
+    
+    if not utils.verify(user_credentials.password, user.password):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN ,detail="Invalid credentials")
+    
+    access_token = oauth2.create_access_token(data={"user_id": user.id})
+    
+    return {
+        "access_token": access_token, 
+        "token_type": "bearer",
+        "name": user.name,
+        "email": user.email
+    }
