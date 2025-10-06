@@ -19,9 +19,8 @@ class nlp_chain:
                  "1. Return ONLY the SQL query without any markdown formatting, explanations, or code blocks. "
                  "2. Do not include ```sql or ``` markers. "
                  "3. ALWAYS use the existing schemas and tables from the provided schema. "
-                 "4. If creating new tables, use the 'mahdi_schema' schema, NOT the 'public' schema. "
-                 "5. For table operations, always prefix table names with the schema (e.g., mahdi_schema.table_name). "
-                 "6. Only work with the tables and columns that exist in the provided schema. "
+                 "4. If creating new tables, use the 'public' schema. "
+                 "5. Only work with the tables and columns that exist in the provided schema. "
                  "Database Schema: {db_schema}"),
                 ("human", "Question: {question}")
             ])
