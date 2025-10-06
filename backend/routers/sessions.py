@@ -33,39 +33,7 @@ async def get_session_status(
         "database_connected": db_connected
     }
 
-@router.post("/disconnect-session/{session_id}", status_code=status.HTTP_200_OK)
-async def disconnect_session(
-    session_id: str,
-    current_user: models.User = Depends(oauth2.get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Disconnect database for the specified session"""
-    # Validate session belongs to user
-    session = oauth2.get_current_session_by_id(session_id, current_user, db)
-    
-    try:
-        from src.Tools.Tools import cleanup_session
-        
-        # Use the cleanup function from Tools
-        cleanup_success = cleanup_session(session_id)
-        
-        if not cleanup_success:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-                detail="Failed to cleanup session resources"
-            )
-        
-        return {
-            "message": "Session disconnected successfully",
-            "session_id": session_id,  # UUID that was serving as both session and thread ID
-            "thread_id": session_id,   # Same UUID for thread continuity (now disconnected)
-            "user_id": current_user.id
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-            detail=f"Error disconnecting session: {e}"
-        )
+
     
 @router.get("/all_sessions", status_code=status.HTTP_200_OK)
 async def get_all_sessions(

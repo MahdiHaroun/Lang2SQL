@@ -67,12 +67,6 @@ def get_current_session_by_id(session_id: str, current_user: models.User, db: Se
     
     return session
         
-
-    
-    
-    
-
-
 def get_user_latest_session(current_user: models.User, db: Session):
     """Get the most recent session for a user (helper function)"""
     session = db.query(models.Session).filter(
