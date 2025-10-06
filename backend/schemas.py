@@ -49,6 +49,8 @@ class Token(User_Response):
 
 class TokenData(BaseModel):
     id: Optional[str] = None
+    
+    
 
 
 
@@ -61,7 +63,3 @@ class Session(BaseModel):
         from_attributes = True
 
 
-class ConnectDBRequest(BaseModel):
-    db_id: int = Field(..., description="ID of the database connection to use")
-    session_id: str = Field(..., description="Session ID (UUID) that serves as thread_id")
-    

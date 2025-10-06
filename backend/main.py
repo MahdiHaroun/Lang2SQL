@@ -44,6 +44,7 @@ async def lifespan(app: FastAPI):
     global_agent = SQLAgent().get_agent(global_main_llm) 
     logger.info("Agent is online") 
     yield
+    
 
 models.Base.metadata.create_all(bind=engine)  # Create tables in the database
 app = FastAPI(lifespan=lifespan , title="SQLAgent API", description="API for SQLAgent using FastAPI")
@@ -72,10 +73,15 @@ async def health_check():
         return {"status": "unhealthy", "message": "Main LLM not initialized"}
     return {"status": "healthy", "message": "Service is up and running"}
 
-@app.get("/health/session")
-async def session_health_check(user_session: tuple = Depends(oauth2.get_current_user_and_session)):
+@app.get("/health/session/{session_id}")
+async def session_health_check(
+    session_id: str,
+    current_user: models.User = Depends(oauth2.get_current_user),
+    db: Session = Depends(get_db)
+):
     """Health check endpoint with session information"""
-    current_user, session_id = user_session
+    # Validate that the session belongs to the user
+    session = oauth2.get_current_session_by_id(session_id, current_user, db)
     
     try:
         from src.Tools.Tools import is_database_connected

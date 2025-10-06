@@ -31,20 +31,21 @@ async def add_db_connection(
 
 
 
-@router.post("/connect_db/", status_code=status.HTTP_200_OK)
+@router.post("/connect_db/{db_id}/{session_id}", status_code=status.HTTP_200_OK)
 async def connect_db(
-    new_db_connection: schemas.ConnectDBRequest,
+    db_id: int,
+    session_id: str,
     db: Session = Depends(get_db),
-    user_session: tuple = Depends(oauth2.get_current_user_and_session)
-    
+    current_user: models.User = Depends(oauth2.get_current_user)
 ): 
     try:
-        current_user, session_id = user_session
-
-    # Get the database connection details and ensure it belongs to the current user
+        # Validate that the session belongs to the current user
+        session = oauth2.get_current_session_by_id(session_id, current_user, db)
+        
+        # Get the database connection details and ensure it belongs to the current user
         db_details = db.query(models.DB_Connection_Details).filter(
-            models.DB_Connection_Details.id == new_db_connection.db_id,
-            models.DB_Connection_Details.owner_id == current_user.id
+            models.DB_Connection_Details.id == db_id,
+            models.DB_Connection_Details.owner_id == current_user.id 
         ).first()
         
         if not db_details:
