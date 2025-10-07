@@ -53,5 +53,5 @@ def get_session_graph(session_id: str):
     return session_graphs[session_id]
 
 # Default graph for backward compatibility
-graph = Graph_builder().get_compiled_graph()
+# graph = Graph_builder().get_compiled_graph()
 

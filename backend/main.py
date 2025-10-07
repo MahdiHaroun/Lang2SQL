@@ -11,6 +11,7 @@ import sys
 from routers import user, google_auth , databases , sessions
 import oauth2
 from fastapi import Depends
+import redis
 
 
 # Add parent directory to path to allow importing from src
@@ -43,7 +44,54 @@ async def lifespan(app: FastAPI):
     logger.info("Creating the SQL agent")
     global_agent = SQLAgent().get_agent(global_main_llm) 
     logger.info("Agent is online") 
+    logger.info("connecting to redis...")
+    try:
+        # Use our Redis client module for consistency
+        from src.redis_client import redis_client
+        if not redis_client.is_connected():
+            redis_client.reconnect()
+        
+        if redis_client.is_connected():
+            logger.info("Connected to Redis successfully")
+        else:
+            raise redis.ConnectionError("Failed to connect to Redis")
+    except redis.ConnectionError as e:
+        logger.error(f"Failed to connect to Redis: {e}")
+        raise e
+    
     yield
+    
+    # Cleanup when shutting down
+    logger.info("Shutting down application...")
+    try:
+        # Clear session connectors cache
+        logger.info("Clearing session connectors cache...")
+        from src.Tools.Tools import session_connectors
+        session_connectors.clear()
+        logger.info("Session connectors cache cleared")
+        
+        # Clear Redis database
+        logger.info("Clearing Redis database...")
+        from src.redis_client import redis_client
+        if redis_client.is_connected():
+            # Clear all session data
+            keys = redis_client.keys("session:*")
+            if keys:
+                redis_client.delete(*keys)
+                logger.info(f"Cleared {len(keys)} session keys from Redis")
+            else:
+                logger.info("No session keys found in Redis")
+            
+            # Close the Redis connection
+            if hasattr(redis_client, 'redis_client') and redis_client.redis_client:
+                redis_client.redis_client.close()
+                logger.info("Redis connection closed")
+        else:
+            logger.info("Redis was not connected during shutdown")
+    except Exception as e:
+        logger.error(f"Error during Redis cleanup: {e}")
+    
+    logger.info("Application shutdown complete")
     
 
 models.Base.metadata.create_all(bind=engine)  # Create tables in the database
