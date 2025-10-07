@@ -17,18 +17,47 @@ async def add_db_connection(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(oauth2.get_current_user)
 ):
-    # Ensure the database connection is owned by the current user
-    new_db.owner_id = current_user.id
-    new_database = models.DB_Connection_Details(**new_db.dict())
+    # Create database connection with automatic owner_id from authenticated user
+    db_data = new_db.dict()
+    db_data["owner_id"] = current_user.id  # Automatically set owner_id from JWT token
+    connection_string = f"postgresql+psycopg2://{db_data['username']}:{db_data['db_password']}@{db_data['host']}:{db_data['port']}/{db_data['database_name']}"
+    test_db = await test_db_connection(connection_string)
+    if test_db["message"] != "Database connection successful":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid database connection details")
+    
+    new_database = models.DB_Connection_Details(**db_data)
     db.add(new_database)
     db.commit()
     db.refresh(new_database)
+    
+    # Return proper response with serializable data
     return {
         "message": "Database added successfully",
-        "db_connection": new_database
+        "db_connection": {
+            "id": new_database.id,
+            "db_type": new_database.db_type,
+            "host": new_database.host,
+            "port": new_database.port,
+            "database_name": new_database.database_name,
+            "username": new_database.username,
+            "owner_id": new_database.owner_id,
+            "created_at": new_database.created_at.isoformat() if new_database.created_at else None
+        }
     }
 
-
+@router.get("/test_db_connection/{connection_string}", status_code=status.HTTP_200_OK)
+async def test_db_connection(
+    connection_string: str,
+):
+    """Test database connection using the provided connection string"""
+    try:
+        from src.Tools_Functions.db_connector import DBConnector
+        db_connector = DBConnector(connection_string)
+        connection = db_connector.connect()
+        connection.close()
+        return {"message": "Database connection successful"}
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Database connection failed: {e}")
 
 
 @router.post("/connect_db/{db_id}/{session_id}", status_code=status.HTTP_200_OK)

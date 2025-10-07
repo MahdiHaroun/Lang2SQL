@@ -4,7 +4,6 @@ from datetime import datetime
 
 
 class DBConfig(BaseModel):
-    owner_id : int = Field(..., description="ID of the user who owns this database connection")
     db_type: str = Field(..., description="Database type, e.g. Postgres/MySQL")
     username: str = Field(..., description="Database username")
     db_password: str = Field(..., description="Database password")
