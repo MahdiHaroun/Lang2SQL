@@ -3,6 +3,7 @@ from database import get_db
 from fastapi import FastAPI , status , HTTPException , Depends , APIRouter
 from sqlalchemy.orm import Session 
 import oauth2
+from urllib.parse import quote_plus
 
 
 
@@ -20,7 +21,11 @@ async def add_db_connection(
     # Create database connection with automatic owner_id from authenticated user
     db_data = new_db.dict()
     db_data["owner_id"] = current_user.id  # Automatically set owner_id from JWT token
-    connection_string = f"postgresql+psycopg2://{db_data['username']}:{db_data['db_password']}@{db_data['host']}:{db_data['port']}/{db_data['database_name']}"
+    
+    # URL-encode username and password to handle special characters like @ symbols
+    encoded_username = quote_plus(db_data['username'])
+    encoded_password = quote_plus(db_data['db_password'])
+    connection_string = f"postgresql+psycopg2://{encoded_username}:{encoded_password}@{db_data['host']}:{db_data['port']}/{db_data['database_name']}"
     test_db = await test_db_connection(connection_string)
     if test_db["message"] != "Database connection successful":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid database connection details")
@@ -54,10 +59,29 @@ async def test_db_connection(
         from src.Tools_Functions.db_connector import DBConnector
         db_connector = DBConnector(connection_string)
         connection = db_connector.connect()
+        
+        # Test if we can execute a simple query
+        from sqlalchemy import text
+        result = connection.execute(text("SELECT 1"))
         connection.close()
+        
         return {"message": "Database connection successful"}
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Database connection failed: {e}")
+        error_msg = str(e)
+        
+        # Provide more helpful error messages based on common issues
+        if "password authentication failed" in error_msg:
+            detail = "Database connection failed: Invalid username or password. Please verify your credentials."
+        elif "does not exist" in error_msg:
+            detail = "Database connection failed: Database does not exist. Please check the database name."
+        elif "Connection refused" in error_msg or "could not connect to server" in error_msg:
+            detail = "Database connection failed: Cannot reach the database server. Please check the host and port."
+        elif "timeout" in error_msg:
+            detail = "Database connection failed: Connection timeout. Please check your network connection and firewall settings."
+        else:
+            detail = f"Database connection failed: {error_msg}"
+            
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
 
 @router.post("/connect_db/{db_id}/{session_id}", status_code=status.HTTP_200_OK)
@@ -84,7 +108,10 @@ async def connect_db(
             )
         
         # Build the connection string (using psycopg2 for synchronous operations)
-        connection_string = f"postgresql+psycopg2://{db_details.username}:{db_details.db_password}@{db_details.host}:{db_details.port}/{db_details.database_name}"
+        # URL-encode username and password to handle special characters like @ symbols
+        encoded_username = quote_plus(db_details.username)
+        encoded_password = quote_plus(db_details.db_password)
+        connection_string = f"postgresql+psycopg2://{encoded_username}:{encoded_password}@{db_details.host}:{db_details.port}/{db_details.database_name}"
         
         # Test the connection by creating a DBConnector and attempting to connect
         from src.Tools_Functions.db_connector import DBConnector

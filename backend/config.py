@@ -3,26 +3,20 @@ from typing import Optional
 
 
 class Settings(BaseSettings):
-    userdatabase_host: str
-    userdatabase_port: int
-    userdatabase_password: str
-    userdatabase_db_name: str
-    userdatabase_username: str
+
+    userdatabase_url: str
+
     secret_key: str
     algorithm: str
     access_token_expire_minutes: int
     
-    # Google OAuth settings
-    google_client_id: str
-    google_client_secret: str
-    google_redirect_uri: str
     
     # Optional fields for compatibility
     groq_api_key: Optional[str] = None
-    langsmith_tracing: Optional[str] = None
-    langsmith_endpoint: Optional[str] = None
-    langsmith_api_key: Optional[str] = None
-    langsmith_project: Optional[str] = None
+    #langsmith_tracing: Optional[str] = None
+    #langsmith_endpoint: Optional[str] = None
+    #langsmith_api_key: Optional[str] = None
+    #langsmith_project: Optional[str] = None
 
     class Config:
         env_file = "../.env"

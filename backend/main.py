@@ -5,6 +5,7 @@ from langchain_core.messages import HumanMessage
 import models
 from database import engine, get_db
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 import logging
 import os
 import sys
@@ -12,6 +13,7 @@ from routers import user, google_auth , databases , sessions
 import oauth2
 from fastapi import Depends
 import redis
+from database import get_db
 
 
 # Add parent directory to path to allow importing from src
@@ -37,6 +39,19 @@ async def lifespan(app: FastAPI):
     global global_graph
     global global_agent
     global global_main_llm
+    logger.info("Starting App's Lifespan")
+    logger.info("Connecting to Main Database")
+    # Test main database connection early so startup fails fast if DB is unreachable
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        logger.info("Connected to main database successfully")
+    except Exception as e:
+        logger.error(f"Failed to connect to main database: {e}")
+        # Re-raise to abort application startup
+        raise
+    
+
     logger.info("Building the graph")
     global_graph = Graph_builder().get_compiled_graph()
     logger.info("Initializing the main LLM")
